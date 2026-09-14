@@ -1,0 +1,156 @@
+name: 构建安装包 (Windows + Linux)
+
+# 手动触发，或推送 v* 标签时自动构建并发布 Release
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # 发布 Release 需要
+
+env:
+  RELEASE_NAME: 灵网登录器
+  RELEASE_BODY: |
+    灵网 · 河南经贸校园网专版 — 安装包
+
+    Windows:
+    - `LingNet_*_x64-setup.exe`：NSIS 安装程序（简体中文，推荐）
+
+    Linux:
+    - `LingNet_*_amd64.AppImage`：免安装，`chmod +x` 后直接运行
+    - `LingNet_*_amd64.deb`：Debian/Ubuntu
+    - `LingNet_*_x86_64.rpm`：Fedora/openSUSE
+
+    > Windows 未做代码签名，首次运行 SmartScreen 可能提示，点击「更多信息 → 仍要运行」即可。
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 安装 Rust (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust 缓存
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 构建 (前端 + Tauri + NSIS 简体中文安装包)
+        run: npm run app:build -- --bundles nsis
+
+      - name: 规范化安装包文件名 (英文名，避免中文被 GitHub 截断)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          $ref = "${{ github.ref_name }}" -replace '[^0-9A-Za-z._-]', ''
+          if ([string]::IsNullOrEmpty($ref)) { $ref = "dev" }
+          $dst = Join-Path $exe.Directory.FullName "LingNet_${ref}_x64-setup.exe"
+          Copy-Item $exe.FullName $dst -Force
+          Write-Host "installer -> $dst"
+
+      - name: 上传安装包 (工作流产物)
+        uses: actions/upload-artifact@v4
+        with:
+          name: 灵网登录器-windows-x64
+          path: src-tauri/target/release/bundle/nsis/LingNet_*_x64-setup.exe
+          if-no-files-found: error
+
+      - name: 发布 Release (仅在推送 tag 时)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.RELEASE_NAME }} ${{ github.ref_name }}
+          body: ${{ env.RELEASE_BODY }}
+          files: src-tauri/target/release/bundle/nsis/LingNet_*_x64-setup.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: build-windows # 顺序执行，避免与 Windows 同时创建 Release 冲突
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 安装 Linux 系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev \
+            patchelf file
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust 缓存
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 构建 (前端 + Tauri + deb/rpm/AppImage)
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          NO_STRIP: "true"
+        run: npm run app:build -- --bundles deb,rpm,appimage
+
+      - name: 规范化产物文件名 (英文名)
+        run: |
+          cd src-tauri/target/release/bundle
+          ref="${{ github.ref_name }}"; ref="${ref//[^0-9A-Za-z._-]/}"; [ -z "$ref" ] && ref=dev
+          cp "$(ls deb/*.deb | head -1)"           "deb/LingNet_${ref}_amd64.deb"
+          cp "$(ls rpm/*.rpm | head -1)"           "rpm/LingNet_${ref}_x86_64.rpm"
+          cp "$(ls appimage/*.AppImage | head -1)" "appimage/LingNet_${ref}_amd64.AppImage"
+          ls -lh deb/LingNet_* rpm/LingNet_* appimage/LingNet_*
+
+      - name: 上传安装包 (工作流产物)
+        uses: actions/upload-artifact@v4
+        with:
+          name: 灵网登录器-linux-x64
+          path: |
+            src-tauri/target/release/bundle/deb/LingNet_*_amd64.deb
+            src-tauri/target/release/bundle/rpm/LingNet_*_x86_64.rpm
+            src-tauri/target/release/bundle/appimage/LingNet_*_amd64.AppImage
+          if-no-files-found: error
+
+      - name: 附加到 Release (仅在推送 tag 时)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.RELEASE_NAME }} ${{ github.ref_name }}
+          body: ${{ env.RELEASE_BODY }}
+          files: |
+            src-tauri/target/release/bundle/deb/LingNet_*_amd64.deb
+            src-tauri/target/release/bundle/rpm/LingNet_*_x86_64.rpm
+            src-tauri/target/release/bundle/appimage/LingNet_*_amd64.AppImage
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

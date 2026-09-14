@@ -1,0 +1,12 @@
+# deps
+node_modules/
+# build output
+dist/
+# rust
+src-tauri/target/
+src-tauri/gen/schemas/
+# logs / os
+*.log
+.DS_Store
+Thumbs.db
+tsconfig.tsbuildinfo

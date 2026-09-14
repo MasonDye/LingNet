@@ -1,0 +1,46 @@
+@import "tailwindcss";
+@import "@appica/ui-react/styles.css";
+
+/* Scan the compiled component library so Tailwind emits its utility classes. */
+@source "../node_modules/@appica/ui-react/dist";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-background, #fff);
+  color: var(--color-foreground, #111);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* Let inputs keep normal text selection. */
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* The soft breathing pulse behind the power button. */
+@keyframes an-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}

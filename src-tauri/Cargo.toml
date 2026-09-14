@@ -1,0 +1,54 @@
+[package]
+name = "lingnet"
+version = "0.1.4"
+description = "灵网登录器 (河南经贸校园网专版 · SRun auto-login)"
+authors = ["masondye"]
+edition = "2021"
+rust-version = "1.77"
+
+# The library that `main.rs` calls into. Shared by the desktop binary and
+# any future mobile targets (the entry point is kept separate on purpose).
+[lib]
+name = "lingnet_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP client. Only plain HTTP (the captive portal) is needed, but rustls is
+# kept so any future https probe works without an OpenSSL system dependency.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"] }
+
+# Async runtime used by tauri commands.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+# SRun crypto primitives.
+md-5 = "0.10"
+hmac = "0.12"
+sha1 = "0.10"
+hex = "0.4"
+
+# Network interface enumeration (cross-platform).
+if-addrs = "0.13"
+
+log = "0.4"
+tauri-plugin-log = "2"
+
+[features]
+# Reserved: `custom-protocol` is what `tauri build` turns on.
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
